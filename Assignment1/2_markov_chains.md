@@ -1,59 +1,83 @@
-### 1. Irreducibility
-A Markov chain is irreducible if it is possible to reach any state from any other state, meaning all states communicate and form a single class. 
+# 2. Markov Chains
 
-By observing the transition matrix $K$, we can trace the strictly positive transition probabilities:
-* From $s_1$, we can transition to $s_2$ since $K_{12} = 0.6 > 0$.
-* From $s_2$, we can transition to $s_4$ since $K_{24} = 0.1 > 0$.
-* From $s_4$, we can transition back to $s_1$ since $K_{41} = 0.4 > 0$.
+The chain $(X_n)_{n \in \mathbb{N}}$ evolves on the state space $S = \{s_1, s_2, s_3, s_4\}$ with transition matrix:
 
-This establishes a cycle: $s_1 \to s_2 \to s_4 \to s_1$. Furthermore, $s_3$ is reachable from $s_1$ ($K_{13} = 0.3$) and can reach $s_2$ ($K_{32} = 0.5$), integrating it fully into the communicating class. Since all states communicate, the chain is irreducible.
+$$K = \begin{pmatrix} 0.1 & 0.6 & 0.3 & 0.0 \\ 0.2 & 0.3 & 0.4 & 0.1 \\ 0.0 & 0.5 & 0.3 & 0.2 \\ 0.4 & 0.0 & 0.4 & 0.2 \end{pmatrix}$$
 
 ---
 
-### 2. Stationary Distribution
-The unique stationary distribution is the normalized row vector $\pi$ that satisfies the equation:
-$$\pi K = \pi$$
-Subject to the constraint that the probabilities sum to 1:
-$$\sum_{j=1}^{4} \pi_j = 1$$
-Using software to solve this linear system (finding the left eigenvector associated with the eigenvalue 1), we obtain the following stationary probabilities:
-$$\pi \approx [0.1425, 0.3726, 0.3507, 0.1342]$$
+## 2.1 Irreducibility
+
+A chain is **irreducible** if every state communicates with every other state, i.e. for all $i, j \in S$ there exists $n \geq 1$ such that $K^n_{ij} > 0$.
+
+The following strictly positive entries of $K$ establish a cycle through all four states:
+
+$$s_1 \xrightarrow{K_{12}=0.6} s_2 \xrightarrow{K_{24}=0.1} s_4 \xrightarrow{K_{41}=0.4} s_1$$
+
+State $s_3$ is reached from $s_1$ via $K_{13} = 0.3 > 0$, and returns to the cycle via $K_{32} = 0.5 > 0$. Since every state can reach and be reached from every other state, all four states form a single communicating class. The chain is therefore irreducible.
 
 ---
 
-### 3. Expected Return Time
-For an irreducible Markov chain, the Ergodic Theorem states that the long-run proportion of time the chain spends in state $i$ converges to its stationary probability $\pi_i$:
-$$\lim_{n\to\infty} \frac{1}{n} \sum_{t=1}^n \mathbb{1}_{\{X_t = i\}} = \pi_i$$
+## 2.2 Stationary Distribution
 
-Let $N_i(n)$ be the total number of visits to state $i$ up to time $n$. The proportion of time spent in state $i$ can be written as:
-$$\lim_{n\to\infty} \frac{N_i(n)}{n} = \pi_i$$
+The stationary distribution is the unique probability vector $\pi$ satisfying:
 
-The total elapsed time $n$ is approximately the sum of the $N_i(n)$ individual return times, denoted as $(T_i)_k$. The empirical average of these return times is the total time divided by the number of visits:
-$$\text{Average Return Time} = \frac{1}{N_i(n)} \sum_{k=1}^{N_i(n)} (T_i)_k = \frac{n}{N_i(n)}$$
+$$\pi K = \pi, \qquad \sum_{j=1}^{4} \pi_j = 1$$
 
-Taking the limit as the number of steps $n \to \infty$, the average return time converges to the expected return time $E[T_i]$:
-$$E[T_i] = \lim_{n\to\infty} \frac{n}{N_i(n)} = \frac{1}{\pi_i}$$
+This is equivalent to finding the left eigenvector of $K$ associated with eigenvalue 1, normalised to sum to 1. Solving numerically:
 
-Using our calculated stationary distribution, the expected return times $E[T_i]$ for states $s_1$ through $s_4$ are approximately **7.02**, **2.68**, **2.85**, and **7.45** steps, respectively.
+$$\pi \approx [0.1425,\; 0.3726,\; 0.3507,\; 0.1342]$$
 
 ---
 
-### 4. Limiting Value (Ergodic Theorem)
-By the Ergodic Theorem for irreducible, positive recurrent Markov chains, the long-run time average of a function $g$ applied to the sequence of states converges to the expected value of $g$ under the stationary distribution $\pi$:
-$$\lim_{n\to\infty} \frac{1}{n} \sum_{t=1}^{n} g(X_t) = \sum_{j=1}^{4} \pi_j g(s_j)$$
+## 2.3 Expected Return Times
 
-Given the function values $g(1)=1$, $g(2)=0$, $g(3)=2$, $g(4)=1$ and our calculated distribution $\pi \approx [0.1425, 0.3726, 0.3507, 0.1342]$, we substitute these into the sum:
-$$\sum_{j=1}^{4} \pi_j g(s_j) \approx (0.1425 \cdot 1) + (0.3726 \cdot 0) + (0.3507 \cdot 2) + (0.1342 \cdot 1)$$
-$$\sum_{j=1}^{4} \pi_j g(s_j) \approx 0.1425 + 0 + 0.7014 + 0.1342 = 0.9781$$
+**Claim:** For each state $i$, the expected return time satisfies $E[T_i] = 1/\pi_i$.
+
+**Proof.** Since the chain is irreducible and the state space is finite, it is positive recurrent, and the ergodic theorem applies. Let $N_i(n)$ denote the number of visits to state $i$ in the first $n$ steps. By the ergodic theorem:
+
+$$\frac{N_i(n)}{n} \xrightarrow{n \to \infty} \pi_i \quad \text{almost surely}$$
+
+Between consecutive visits to $i$, the elapsed time is exactly one return time $T_i^{(k)}$. By the strong law of large numbers applied to the renewal process, the empirical mean of these return times converges almost surely to $E[T_i]$:
+
+$$\frac{1}{N_i(n)} \sum_{k=1}^{N_i(n)} T_i^{(k)} \xrightarrow{n \to \infty} E[T_i]$$
+
+The left-hand side also equals $n / N_i(n)$, since the $N_i(n)$ return intervals partition the $n$ elapsed steps. Taking the limit:
+
+$$E[T_i] = \lim_{n \to \infty} \frac{n}{N_i(n)} = \frac{1}{\pi_i} \qquad \square$$
+
+Substituting the stationary probabilities gives the expected return times:
+
+| State | $\pi_i$ | $E[T_i] = 1/\pi_i$ |
+|-------|---------|---------------------|
+| $s_1$ | 0.1425 | 7.02 steps |
+| $s_2$ | 0.3726 | 2.68 steps |
+| $s_3$ | 0.3507 | 2.85 steps |
+| $s_4$ | 0.1342 | 7.45 steps |
 
 ---
 
-### 5. Aperiodicity
-A state $s_i$ is aperiodic if the greatest common divisor (GCD) of the set of all its possible return times is 1. A sufficient condition for a state to be aperiodic is the presence of a self-loop, meaning $K_{ii} > 0$, as this guarantees a possible return time of 1 step.
+## 2.4 Limiting Time Average
 
-Looking at the main diagonal of the transition matrix $K$:
-* $K_{11} = 0.1 > 0$
-* $K_{22} = 0.3 > 0$
-* $K_{33} = 0.3 > 0$
-* $K_{44} = 0.2 > 0$
+For an irreducible, positive recurrent Markov chain, the ergodic theorem gives:
 
-Every state has a strictly positive probability of remaining in itself for the next step, ensuring that every state has a period of 1. Because aperiodicity is a class property in an irreducible chain, and all states are aperiodic, the entire Markov chain is aperiodic.
+$$\lim_{n\to\infty} \frac{1}{n} \sum_{t=1}^{n} g(X_t) = \mathbb{E}_\pi[g] = \sum_{j=1}^{4} \pi_j\, g(s_j) \quad \text{almost surely}$$
+
+for any bounded function $g: S \to \mathbb{R}$. With $g(s_1)=1$, $g(s_2)=0$, $g(s_3)=2$, $g(s_4)=1$ and $\pi \approx [0.1425, 0.3726, 0.3507, 0.1342]$:
+
+$$\mathbb{E}_\pi[g] = (0.1425)(1) + (0.3726)(0) + (0.3507)(2) + (0.1342)(1)$$
+$$= 0.1425 + 0 + 0.7014 + 0.1342 = \boxed{0.9781}$$
+
+---
+
+## 2.5 Aperiodicity
+
+The **period** of state $i$ is $d(i) = \gcd\{n \geq 1 : K^n_{ii} > 0\}$. A state is aperiodic if $d(i) = 1$.
+
+A sufficient condition for aperiodicity is $K_{ii} > 0$: a self-loop guarantees that return in exactly 1 step is possible, forcing $\gcd$ to divide 1. Inspecting the diagonal of $K$:
+
+$$K_{11} = 0.1 > 0, \quad K_{22} = 0.3 > 0, \quad K_{33} = 0.3 > 0, \quad K_{44} = 0.2 > 0$$
+
+Every state has a self-loop, so every state is aperiodic. Since the chain is irreducible, aperiodicity is a class property: if one state is aperiodic, all states are. The chain is therefore aperiodic.
+
+Together with irreducibility and positive recurrence, aperiodicity implies that $K^n_{ij} \to \pi_j$ as $n \to \infty$ for all $i, j$, i.e. the chain converges to $\pi$ from any starting state.
