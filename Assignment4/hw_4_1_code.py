@@ -7,9 +7,13 @@ constructs an n-dimensional simplex automatically.
 
 from __future__ import annotations
 
+import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
+
+TABLE_WIDTH = 60
 
 
 # ============================================================
@@ -627,9 +631,9 @@ def _format_float(value, width=12):
     return f"{value:>{width}.6f}"
 
 
-def _format_vector(x):
+def _format_vector(x, precision=6):
     """Format a vector on one line."""
-    return "[" + ", ".join(f"{v:.6g}" for v in _as_vector(x)) + "]"
+    return "[" + ", ".join(f"{v:.{precision}g}" for v in _as_vector(x)) + "]"
 
 
 def _known_minimum_value(f, grad, hess, starting_points):
@@ -698,7 +702,7 @@ def _run_nelder_mead(f, x0, diameter, max_iter):
 def _print_parameter_summary():
     """Print the parameters used in the comparison."""
     print("Parameters")
-    print("-" * 79)
+    print("-" * TABLE_WIDTH)
     print("GD: lr=0.001")
     print("Polyak GD: lr=0.001, momentum=0.9")
     print("Nesterov GD: lr=0.001, momentum=0.9")
@@ -712,7 +716,7 @@ def _print_parameter_summary():
 def _print_information_summary():
     """Print what information each method uses."""
     print("Information used")
-    print("-" * 79)
+    print("-" * TABLE_WIDTH)
     print("Nelder-Mead: function values only")
     print("GD / Polyak GD / Nesterov GD / AdaGrad / BFGS: function values and gradients")
     print("Newton: function values, gradients, and Hessians")
@@ -732,9 +736,9 @@ def compare_methods(max_iter=1000):
         for function_name, f, grad, hess, starting_points in TEST_FUNCTIONS:
             f_star = _known_minimum_value(f, grad, hess, starting_points)
 
-            print("=" * 79)
+            print("=" * TABLE_WIDTH)
             print(f"{function_name}: reference minimum value approximately {f_star:.12g}")
-            print("=" * 79)
+            print("=" * TABLE_WIDTH)
 
             for start_index, x0 in enumerate(starting_points, start=1):
                 rows = []
@@ -756,7 +760,7 @@ def compare_methods(max_iter=1000):
                     f"{'method':<20} {'f(x)':>12} {'gap':>12} {'iter':>6} "
                     f"{'evals':>7} {'evals/s':>10} {'final x'}"
                 )
-                print("-" * 79)
+                print("-" * TABLE_WIDTH)
 
                 for row in rows:
                     gap = row["f"] - f_star
@@ -774,9 +778,9 @@ def compare_methods(max_iter=1000):
                 summary.append((function_name, start_index, best["method"], best["f"]))
                 print(f"\nBest final value: {best['method']} with f = {best['f']:.12g}")
 
-        print("\n" + "=" * 79)
+        print("\n" + "=" * TABLE_WIDTH)
         print("Generality across functions")
-        print("=" * 79)
+        print("=" * TABLE_WIDTH)
         for function_name, start_index, method_name, value in summary:
             print(
                 f"{function_name}, starting point {start_index}: "
@@ -786,5 +790,191 @@ def compare_methods(max_iter=1000):
         np.seterr(**old_numpy_settings)
 
 
+# ============================================================
+# Black-box optimization
+# ============================================================
+
+STUDENT_ID = "63210005"
+BLACK_BOX_EXE = ".\\hw_4_1_win.exe"
+BLACK_BOX_STARTS = [
+    np.array([0.0, 0.0, 0.0]),
+]
+
+
+def black_box_value(function_index, point, student_id=STUDENT_ID, executable=BLACK_BOX_EXE):
+    """Evaluate the provided black-box executable at one point."""
+    x, y, z = _as_vector(point)
+    command = [
+        executable,
+        str(student_id),
+        str(function_index),
+        f"{x:.17g}",
+        f"{y:.17g}",
+        f"{z:.17g}",
+    ]
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    return float(completed.stdout.strip())
+
+
+def central_difference_gradient(f, x, h=1e-5, workers=6):
+    """Approximate the gradient by two-sided finite differences."""
+    x = _as_vector(x)
+    points = []
+
+    for j in range(len(x)):
+        step = np.zeros_like(x)
+        step[j] = h
+        points.append(x + step)
+        points.append(x - step)
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        values = list(executor.map(f, points))
+
+    grad = np.zeros_like(x)
+    for j in range(len(x)):
+        grad[j] = (values[2 * j] - values[2 * j + 1]) / (2 * h)
+
+    return grad
+
+
+def make_black_box_objective(function_index):
+    """Create a cached callable for one black-box function."""
+    cache = {}
+    stats = {"calls": 0}
+
+    def f(x):
+        key = tuple(round(float(v), 12) for v in _as_vector(x))
+        if key not in cache:
+            cache[key] = black_box_value(function_index, key)
+            stats["calls"] += 1
+        return cache[key]
+
+    f.stats = stats
+    f.cache = cache
+    return f
+
+
+def black_box_bfgs(
+    function_index,
+    x0,
+    max_iter=20,
+    grad_h=1e-5,
+    tol_grad=1e-7,
+    min_step=1e-7,
+):
+    """BFGS for a black-box function using central finite-difference gradients."""
+    f = make_black_box_objective(function_index)
+
+    def grad(x):
+        return central_difference_gradient(
+            f,
+            x,
+            h=grad_h,
+            workers=2 * len(_as_vector(x)),
+        )
+
+    start = time.perf_counter()
+    result = bfgs(
+        f,
+        grad,
+        x0,
+        max_iter=max_iter,
+        tol_grad=tol_grad,
+        min_step=min_step,
+    )
+    result["elapsed"] = time.perf_counter() - start
+    result["black_box_calls"] = f.stats["calls"]
+    result["function_index"] = function_index
+    result["optimizer"] = "BFGS with finite-difference gradient"
+    return result
+
+
+def black_box_nelder_mead(
+    function_index,
+    x0,
+    max_iter=20,
+    diameter=1.0,
+    tol_x=1e-7,
+    tol_f=1e-9,
+):
+    """Nelder-Mead for the black-box functions."""
+    f = make_black_box_objective(function_index)
+
+    start = time.perf_counter()
+    result = nelder_mead(
+        f,
+        x0,
+        diameter=diameter,
+        max_iter=max_iter,
+        tol_x=tol_x,
+        tol_f=tol_f,
+    )
+    result["elapsed"] = time.perf_counter() - start
+    result["black_box_calls"] = f.stats["calls"]
+    result["function_index"] = function_index
+    result["diameter"] = diameter
+    result["optimizer"] = f"Nelder-Mead d={diameter:g}"
+    return result
+
+
+def run_black_box_optimization(
+    methods=None,
+    function_indices=(1, 2, 3),
+    starts=None,
+    max_iter=20,
+):
+    """Run selected black-box optimization methods.
+
+    The default runs only finite-difference BFGS from the origin because each
+    executable call is slow. Extra starts can be passed explicitly when needed.
+    Pass methods=(black_box_bfgs, black_box_nelder_mead) to compare both.
+    """
+    if methods is None:
+        methods = (black_box_bfgs,)
+
+    if starts is None:
+        starts = BLACK_BOX_STARTS
+
+    all_best = []
+
+    for function_index in function_indices:
+        print("=" * TABLE_WIDTH)
+        print(f"Black-box function f_{STUDENT_ID},{function_index}")
+        print("=" * TABLE_WIDTH)
+
+        results = []
+
+        for method in methods:
+            for x0 in starts:
+                if method is black_box_nelder_mead:
+                    result = method(function_index, x0, max_iter=max_iter, diameter=1.0)
+                else:
+                    result = method(function_index, x0, max_iter=max_iter)
+                results.append(result)
+                print(
+                    f"{result['optimizer']:<38} start={_format_vector(x0)} "
+                    f"f={result['f']:.15g}, x={_format_vector(result['x'], 15)}, "
+                    f"calls={result['black_box_calls']}, time={result['elapsed']:.1f}s"
+                )
+
+        best = min(results, key=lambda result: result["f"])
+        all_best.append(best)
+        print("\nBest candidate:")
+        print(
+            f"{best['optimizer']}, f={best['f']:.15g}, x={_format_vector(best['x'], 15)}, "
+            f"calls={best['black_box_calls']}, time={best['elapsed']:.1f}s"
+        )
+        print()
+
+    return all_best
+
+
 if __name__ == "__main__":
-    compare_methods()
+    # compare_methods()
+    run_black_box_optimization(methods=(black_box_bfgs, black_box_nelder_mead), max_iter=20)

@@ -133,8 +133,68 @@ For the Beale function `f_c`, Nelder-Mead performed best from both starting poin
 
 6. **Sensitivity to parameters**
 
-   The first-order methods depended strongly on the fixed learning rate. Nelder-Mead depended on the simplex diameter, but the tested diameters `0.1`, `1.0`, and `3.0` all worked reasonably well. The best diameter was not always the same for every function.
+   For Nelder-Mead, this was tested directly by using simplex diameters `0.1`, `1.0`, and `3.0`. All three worked reasonably well, but the best diameter was not always the same for every function. For the gradient-based methods, the parameters were kept the same as in the previous homework, so their parameter sensitivity was discussed qualitatively rather than tested again.
 
 7. **Generality across functions**
 
    Newton was very strong when derivatives and Hessians worked well. BFGS was also strong, especially when the gradient gave useful curvature information. Nelder-Mead was the most generally applicable method because it only used function values and still performed well on all three functions.
+
+## Black box optimization
+
+The student ID used for this part is `63210005`. Therefore the three black-box functions are maps
+
+$$f_{63210005,i}: \mathbb{R}^3 \to \mathbb{R}, \qquad i \in \{1,2,3\}.$$
+
+They are evaluated through the provided executable:
+
+```text
+hw_4_1_win.exe 63210005 i x y z
+```
+
+where `i` is one of `1`, `2`, or `3`, and `(x,y,z)` is the point where the function is evaluated.
+
+**Question.** How would one use a gradient-descent based method in such a case? Which one is best suitable? Can you beat Nelder-Mead?
+
+**Answer.** Since the functions are black boxes, exact gradients are not available. A gradient-based method can still be used by approximating the gradient with two-sided finite differences:
+
+$$
+\frac{\partial f}{\partial x_j}(x) \approx
+\frac{f(x + h e_j) - f(x - h e_j)}{2h}.
+$$
+
+Since the functions are maps from `R^3` to `R`, one such gradient approximation needs `6` black-box evaluations. The most suitable gradient-based method is BFGS, because it uses gradient information efficiently and builds approximate second-order information without needing an exact Hessian. The result can then be compared with Nelder-Mead to check whether the gradient-based method gives a lower value.
+
+### Black-box numerical results
+
+The following run used BFGS with central finite-difference gradients and Nelder-Mead, both from the starting point `(0,0,0)` with `max_iter = 20`.
+
+```text
+============================================================
+Black-box function f_63210005,1
+============================================================
+BFGS with finite-difference gradient   start=[0, 0, 0] f=0.50001236, x=[0.36665, 0.123667, 0.00123667], calls=36, time=33.2s
+Nelder-Mead d=1                        start=[0, 0, 0] f=0.500104356666149, x=[0.375927, 0.125327, 0.00301725], calls=43, time=124.7s
+
+Best candidate:
+BFGS with finite-difference gradient, f=0.50001236, x=[0.36665, 0.123667, 0.00123667], calls=36, time=33.2s
+
+============================================================
+Black-box function f_63210005,2
+============================================================
+BFGS with finite-difference gradient   start=[0, 0, 0] f=0.509324777737146, x=[0.0987744, -0.032654, 0.396529], calls=172, time=192.3s
+Nelder-Mead d=1                        start=[0, 0, 0] f=0.723936815252721, x=[0.350221, -0.383783, 0.484571], calls=40, time=115.7s
+
+Best candidate:
+BFGS with finite-difference gradient, f=0.509324777737146, x=[0.0987744, -0.032654, 0.396529], calls=172, time=192.3s
+
+============================================================
+Black-box function f_63210005,3
+============================================================
+BFGS with finite-difference gradient   start=[0, 0, 0] f=0.500012360000003, x=[0.123666, 0.00123679, 0.36665], calls=70, time=57.4s
+Nelder-Mead d=1                        start=[0, 0, 0] f=0.500049027835165, x=[0.120123, -0.00273323, 0.356297], calls=42, time=123.7s
+
+Best candidate:
+BFGS with finite-difference gradient, f=0.500012360000003, x=[0.123666, 0.00123679, 0.36665], calls=70, time=57.4s
+```
+
+With this iteration budget, BFGS with finite-difference gradients gave a lower value than Nelder-Mead on all three black-box functions. The results for the first and third functions appear stable, while the second function may still require additional refinement if twelve significant digits are required.
