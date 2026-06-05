@@ -10,6 +10,7 @@ from __future__ import annotations
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
+from itertools import combinations
 
 import numpy as np
 
@@ -975,6 +976,61 @@ def run_black_box_optimization(
     return all_best
 
 
+# ============================================================
+# Toy LP by active-constraint enumeration
+# ============================================================
+
+def solve_toy_lp():
+    """Solve the LP by checking all triples of active constraints."""
+    objective = np.array([1.0, 3.0, 4.0])
+    constraints = [
+        ("x1 - x2 + x3 <= 5", np.array([1.0, -1.0, 1.0]), 5.0),
+        ("x1 + x2 - x3 <= 7", np.array([1.0, 1.0, -1.0]), 7.0),
+        ("-x1 + x2 + x3 <= 10", np.array([-1.0, 1.0, 1.0]), 10.0),
+        ("x1 + 2x2 + 3x3 <= 8", np.array([1.0, 2.0, 3.0]), 8.0),
+        ("3x1 + 2x2 + x3 <= 6", np.array([3.0, 2.0, 1.0]), 6.0),
+        ("x1 >= 0", np.array([-1.0, 0.0, 0.0]), 0.0),
+        ("x2 >= 0", np.array([0.0, -1.0, 0.0]), 0.0),
+        ("x3 >= 0", np.array([0.0, 0.0, -1.0]), 0.0),
+    ]
+
+    feasible_vertices = []
+
+    for active_indices in combinations(range(len(constraints)), 3):
+        matrix = np.vstack([constraints[i][1] for i in active_indices])
+        rhs = np.array([constraints[i][2] for i in active_indices])
+
+        try:
+            x = np.linalg.solve(matrix, rhs)
+        except np.linalg.LinAlgError:
+            continue
+
+        feasible = all(a @ x <= b + 1e-10 for _, a, b in constraints)
+        if feasible:
+            value = float(objective @ x)
+            feasible_vertices.append((value, x, active_indices))
+
+    best_value, best_x, best_active = max(feasible_vertices, key=lambda item: item[0])
+
+    print("=" * TABLE_WIDTH)
+    print("Toy LP by active-constraint enumeration")
+    print("=" * TABLE_WIDTH)
+    print(f"Number of feasible vertices: {len(feasible_vertices)}")
+    print(f"Optimal x = {_format_vector(best_x, 15)}")
+    print(f"Optimal value = {best_value:.15g}")
+    print("Active constraints:")
+    for i in best_active:
+        print(f"  {i + 1}. {constraints[i][0]}")
+
+    return {
+        "x": best_x,
+        "value": best_value,
+        "active_constraints": best_active,
+        "feasible_vertices": feasible_vertices,
+    }
+
+
 if __name__ == "__main__":
     # compare_methods()
-    run_black_box_optimization(methods=(black_box_bfgs, black_box_nelder_mead), max_iter=20)
+    # run_black_box_optimization(methods=(black_box_bfgs, black_box_nelder_mead), max_iter=20)
+    solve_toy_lp()

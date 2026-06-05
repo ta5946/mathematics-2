@@ -198,3 +198,37 @@ BFGS with finite-difference gradient, f=0.500012360000003, x=[0.123666, 0.001236
 ```
 
 With this iteration budget, BFGS with finite-difference gradients gave a lower value than Nelder-Mead on all three black-box functions. The results for the first and third functions appear stable, while the second function may still require additional refinement if twelve significant digits are required.
+
+## A toy solution to a linear problem
+
+There are 3 variables and 8 inequalities, including the three nonnegativity constraints. The method checks all triples of active constraints:
+
+$$\binom{8}{3} = 56.$$
+
+For each triple, the three selected inequalities are treated as equalities. The resulting linear system is solved, and the solution is kept only if it satisfies all 8 original inequalities.
+
+Since the problem is a maximization problem, the feasible candidate with the largest value of `x1 + 3x2 + 4x3` is selected.
+
+The code found 6 feasible vertices. The optimal solution is
+
+$$x = (0, 2.5, 1).$$
+
+The objective value is
+
+$$x_1 + 3x_2 + 4x_3 = 0 + 3 \cdot 2.5 + 4 \cdot 1 = 11.5.$$
+
+The active constraints at the optimum are:
+
+```text
+x1 + 2x2 + 3x3 = 8
+3x1 + 2x2 + x3 = 6
+x1 = 0
+```
+
+**Question.** How does this approach generalize if we increase the number of variables and the number of constraints?
+
+**Answer.** If there are `n` variables and `m` inequalities, then a vertex is usually determined by `n` active constraints. The same method would check all
+
+$$\binom{m}{n}$$
+
+choices of active constraints. This works for small problems, but becomes too expensive when `m` and `n` grow. For larger LPs, simplex or interior-point methods are more appropriate.
