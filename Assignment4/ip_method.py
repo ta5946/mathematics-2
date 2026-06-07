@@ -18,6 +18,7 @@ Functions, by homework problem:
     round_decisions    set the smaller of x_i, s_i to zero      (problem 10)
     exact_solve        exact rational solve + verification       (problem 11)
     solve_with_highs   reference solve (simplex + interior)     (problem 12)
+    analytic_center    analytic center via log-barrier (BFGS)   (problem 16)
     benchmark          iterations / runtime / error table
     plot_convergence   convergence figure
 
@@ -200,6 +201,33 @@ def solve_with_highs(A, b, c):
 
 
 # ----------------------------------------------------------------------
+# Problem 16: analytic center of a system A x <= b
+# ----------------------------------------------------------------------
+def analytic_center(A, b, x0):
+    """
+    Analytic center = argmax prod_i s_i(x) = argmin -sum_i log(b_i - a_i^T x).
+    The objective is strictly convex with gradient  A^T (1/s),  so a
+    gradient-based minimization (BFGS) finds the center quickly.
+    Returns the center x and the slacks s = b - A x.
+    """
+    from scipy.optimize import minimize
+
+    def neg_log_barrier(x):
+        s = b - A @ x
+        if np.any(s <= 0):           # outside the region -> reject
+            return np.inf
+        return -np.sum(np.log(s))
+
+    def grad(x):
+        s = b - A @ x
+        return A.T @ (1.0 / s)        # d/dx [-sum log s_i] = sum_i a_i / s_i
+
+    res = minimize(neg_log_barrier, x0, jac=grad, method="BFGS",
+                   options={"gtol": 1e-12})
+    return res.x, b - A @ res.x
+
+
+# ----------------------------------------------------------------------
 # Benchmark: iterations, runtime, error across all methods
 # ----------------------------------------------------------------------
 def benchmark(A, b, c, start, optimum, repeats=30):
@@ -328,3 +356,32 @@ if __name__ == "__main__":
 
     # benchmark table
     benchmark(A, b, c, start(), optimum=OPT)
+
+    # problem 16: analytic center of a separate inequality system
+    print("\nanalytic center (problem 16):")
+    Ac = np.array([[2., 1.], [6., 1.], [-1., 0.], [0., -1.]])
+    bc = np.array([6., 15., 0., 0.])
+    xc, sc = analytic_center(Ac, bc, x0=np.array([0.5, 1.0]))
+    print(f"  center = ({xc[0]:.6f}, {xc[1]:.6f})")
+    print("  slacks =", np.round(sc, 6), " all > 0:", np.all(sc > 0))
+
+    # problem 17: add the redundant constraint 2 x1 + x2 <= 18
+    print("\nredundant constraint 2x1+x2<=18 (problem 17):")
+    A17 = np.vstack([Ac, [2., 1.]])
+    b17 = np.append(bc, 18.)
+    x17, s17 = analytic_center(A17, b17, x0=np.array([0.5, 1.0]))
+    print(f"  center = ({x17[0]:.6f}, {x17[1]:.6f})")
+    print(f"  shift from problem 16 = ({x17[0]-xc[0]:+.6f}, {x17[1]-xc[1]:+.6f})")
+    print("  slacks =", np.round(s17, 6), " all > 0:", np.all(s17 > 0))
+    print(f"  added slack = {s17[-1]:.4f} (large, never binding -> small shift)")
+
+    # problem 18: add 4 x1 + 2 x2 <= 12, a scaled duplicate of constraint 1
+    print("\nduplicate constraint 4x1+2x2<=12 == 2*(2x1+x2<=6) (problem 18):")
+    A18 = np.vstack([Ac, [4., 2.]])
+    b18 = np.append(bc, 12.)
+    x18, s18 = analytic_center(A18, b18, x0=np.array([0.5, 1.0]))
+    print(f"  center = ({x18[0]:.6f}, {x18[1]:.6f})")
+    print(f"  shift from problem 16 = ({x18[0]-xc[0]:+.6f}, {x18[1]-xc[1]:+.6f})")
+    print("  slacks =", np.round(s18, 6), " all > 0:", np.all(s18 > 0))
+    print(f"  added slack = {s18[-1]:.4f} = 2 * s1 ({s18[0]:.4f}) "
+          f"-> constraint 1 counts twice -> large shift")
